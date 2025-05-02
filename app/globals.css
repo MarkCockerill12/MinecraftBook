@@ -1,26 +1,394 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/* Font declaration to ensure browser loads it correctly */
+@font-face {
+  font-family: 'Minecraft'; 
+  src: url('/fonts/minecraft_font.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: optional;
+  font-feature-settings: normal;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Fallback Minecraft-style font */
+@font-face {
+  font-family: 'MinecraftBackup';
+  src: local('VT323'), monospace;
+  font-weight: normal;
+  font-style: normal;
+}
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-rgb: 92, 139, 82; /* Minecraft grass green */
+  --font-minecraft: var(--font-pixel), monospace;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --foreground-rgb: 255, 255, 255;
   }
 }
 
+/* Apply the font globally with higher specificity */
+html, body {
+  font-family: var(--font-pixel), monospace !important;
+  min-height: 100vh;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  color: rgb(var(--foreground-rgb));
+  background: rgb(var(--background-rgb));
+  min-height: 100vh;
+  height: 100%;
+  width: 100%;
+  overflow-x: hidden;
+  font-family: var(--font-pixel), monospace !important;
+  display: flex;
+  flex-direction: column;
+  background-image: url('/minecraft-background.png');
+  background-size: cover;
+  background-attachment: fixed;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+#__next, main {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
+}
+
+/* Force Minecraft font on all elements */
+*, 
+*::before, 
+*::after,
+button,
+input,
+textarea,
+select,
+option,
+h1, h2, h3, h4, h5, h6,
+p, span, div, a, li {
+  font-family: var(--font-pixel), monospace !important;
+}
+
+/* Additional specific selector for input elements */
+input, textarea, button, select {
+  font-family: var(--font-pixel), monospace !important;
+}
+
+/* Fix for dynamic content */
+[data-nextjs-scroll-focus-boundary] * {
+  font-family: var(--font-minecraft) !important;
+}
+
+/* Ensure UI components use the Minecraft font */
+.button, 
+.input, 
+.dropdown, 
+.menu, 
+.dialog,
+.toast {
+  font-family: var(--font-minecraft) !important;
+}
+
+/* Book-specific styling */
+.book-container {
+  transform-style: preserve-3d;
+  perspective: 1500px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5); /* Added shadow between background and book */
+}
+
+textarea::placeholder {
+  color: rgba(63, 63, 63, 0.5);
+  opacity: 0.7;
+}
+
+/* Page turning animations - properly synced text */
+@keyframes turnPageForward {
+  0% {
+    transform: rotateY(0deg);
+    z-index: 50;
+  }
+  100% {
+    transform: rotateY(-180deg);
+    z-index: 50;
+  }
+}
+
+@keyframes turnPageBackward {
+  0% {
+    transform: rotateY(0deg);
+    z-index: 50;
+  }
+  100% {
+    transform: rotateY(180deg);
+    z-index: 50;
+  }
+}
+
+/* Animation classes with better text syncing */
+.animate-page-forward {
+  animation: turnPageForward 0.8s ease-in-out;
+  transform-origin: left center;
+  animation-fill-mode: forwards;
+  backface-visibility: visible !important;
+  -webkit-backface-visibility: visible !important;
+}
+
+.animate-page-backward {
+  animation: turnPageBackward 0.8s ease-in-out;
+  transform-origin: right center;
+  animation-fill-mode: forwards;
+  backface-visibility: visible !important;
+  -webkit-backface-visibility: visible !important;
+}
+
+/* Page containers with 3D transforms */
+.book-3d-container {
+  transform-style: preserve-3d;
+  perspective: 2000px;
+}
+
+.turning-page {
+  position: absolute;
+  width: 50%;
+  height: 100%;
+  top: 0;
+  transform-style: preserve-3d !important;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.turning-page-right {
+  right: 0;
+}
+
+.turning-page-left {
+  left: 0;
+}
+
+/* Make text stay visible during turns */
+.turning-page-content {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+
+.page-front {
+  transform: rotateY(0deg);
+  z-index: 2;
+}
+
+.page-back {
+  transform: rotateY(180deg);
+  z-index: 1;
+}
+
+/* Container styles */
+.turning-page {
+  position: absolute;
+  width: 50%;
+  height: 100%;
+  top: 0;
+  perspective: 2000px;
+  transform-style: preserve-3d;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.turning-page-right {
+  right: 0;
+}
+
+.turning-page-left {
+  left: 0;
+}
+
+/* The actual turning element */
+.turning-page-element {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  backface-visibility: visible !important;
+  -webkit-backface-visibility: visible !important;
+}
+
+/* Page content */
+.turning-page-content {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+  transform-style: preserve-3d;
+  perspective: inherit;
+}
+
+.turning-page-front {
+  transform: rotateY(0deg);
+  z-index: 2;
+}
+
+.turning-page-back {
+  transform: rotateY(180deg);
+  z-index: 1;
+}
+
+/* Hide static pages during animation */
+.hide-during-animation {
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+
+/* Book page specific styling */
+.book-page {
+  width: 50%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  transform-style: preserve-3d;
+  backface-visibility: hidden;
+}
+
+.book-page-left {
+  left: 0;
+  z-index: 1;
+}
+
+.book-page-right {
+  right: 0;
+  z-index: 0;
+}
+
+/* Remove brown borders in the middle of the book */
+.book-page-left::before, .book-page-right::before {
+  display: none;
+}
+
+/* Minecraft-style navigation buttons */
+.minecraft-button {
+  font-family: var(--font-minecraft) !important;
+  background-color: #545454;
+  border: 2px solid #000;
+  box-shadow: inset -2px -4px #000, inset 2px 2px #AAA;
+  padding: 8px 12px;
+  color: #fff;
+  text-shadow: 2px 2px #000;
+  cursor: pointer;
+  transition: all 0.1s;
+  user-select: none;
+}
+
+.minecraft-button:hover {
+  background-color: #656565;
+}
+
+.minecraft-button:active {
+  box-shadow: inset -2px -4px #0004, inset 2px 2px #AAA8;
+}
+
+/* Export button styling */
+.export-button {
+  position: absolute;
+  bottom: -50px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+}
+
+/* Page turning buttons - Minecraft style */
+.page-turn-button {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #545454;
+  border: 2px solid #000;
+  box-shadow: inset -2px -4px #000, inset 2px 2px #AAA;
+  color: #fff;
+  text-shadow: 1px 1px #000;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.page-turn-button:hover {
+  background-color: #656565;
+}
+
+.page-turn-button:active {
+  box-shadow: inset -2px -4px #0004, inset 2px 2px #AAA8;
+}
+
+/* Minecraft-style toggle switch */
+.minecraft-toggle {
+  background-color: #545454 !important;
+  border: 2px solid #000 !important;
+  box-shadow: inset -1px -2px #000, inset 1px 1px #AAA !important;
+  height: 24px !important;
+  width: 44px !important;
+}
+
+.minecraft-toggle[data-state="checked"] {
+  background-color: #7fb238 !important; /* Minecraft green */
+}
+
+.minecraft-toggle[data-state="checked"] > span {
+  transform: translateX(22px) !important;
+  background-color: #c6c6c6 !important;
+  border: 1px solid #000 !important;
+}
+
+.minecraft-toggle > span {
+  width: 16px !important;
+  height: 16px !important;
+  background-color: #c6c6c6 !important;
+  border: 1px solid #000 !important;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Editor layout transition */
+.editor-layout-transition {
+  transition: all 0.5s cubic-bezier(0.4, 0.0, 0.2, 1);
+}
+
+/* Special styles for exporting book */
+.exporting-book textarea {
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: block !important;
+  transform: none !important;
+  transition: none !important;
+  -webkit-font-smoothing: subpixel-antialiased !important;
+  -moz-osx-font-smoothing: grayscale !important;
+  text-rendering: geometricPrecision !important;
+}
+
+.exporting-book .book-container {
+  pointer-events: none !important;
+}
+
+.export-clone textarea {
+  opacity: 1 !important;
+  visibility: visible !important;
+  display: block !important;
+  text-rendering: geometricPrecision !important;
+  transform: translateZ(0) !important;
 }
