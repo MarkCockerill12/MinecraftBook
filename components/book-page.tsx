@@ -8,7 +8,8 @@ import {
   MAX_FONT_SIZE, 
   PADDING_VERTICAL, 
   REGULAR_MODE, 
-  EDITOR_MODE, 
+  EDITOR_MODE,
+  MOBILE_MODE,
   TEXT_STYLE 
 } from "@/lib/book-config"
 
@@ -31,11 +32,19 @@ export default function BookPage({ content, onChange, pageNumber, scale = 1 }: R
   const [maxCharsPerLine, setMaxCharsPerLine] = useState(EDITOR_MODE.charsPerLine)
   const [textAreaHeight, setTextAreaHeight] = useState<number | null>(null)
 
-  // Get layout-specific sizing constants based on editor mode
+  // Get layout-specific sizing constants based on editor mode and screen size
   const getOptimalSizingConstantsForLayout = () => {
     const isEditorMode = containerRef.current?.closest('.editor-mode') !== null;
     
-    // Return the appropriate configuration based on mode
+    // Check if we're on a mobile device (screen width < 640px)
+    const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 640;
+    
+    // First priority: use mobile settings if on a small screen
+    if (isMobileDevice) {
+      return MOBILE_MODE;
+    }
+    
+    // Otherwise use regular editor/desktop modes
     return isEditorMode ? EDITOR_MODE : REGULAR_MODE;
   };
 

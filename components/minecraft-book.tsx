@@ -9,6 +9,7 @@ import {
   CHARS_PER_PAGE, 
   EDITOR_MODE, 
   REGULAR_MODE,
+  MOBILE_MODE,
   TEXT_STYLE,
   EXPORT_SETTINGS,
   MAX_FONT_SIZE,
@@ -152,10 +153,13 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
       // Remember original state to restore later
       const originalSpread = currentSpread;
       
-      // Important: Always use regular mode sizing for exports regardless of editor state
-      const regularModeConfig = REGULAR_MODE;
+      // Check if we're on a mobile device
+      const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 640;
       
-      // Extract font size based on the regular mode config
+      // Choose the appropriate mode configuration for export
+      const modeConfig = isMobileDevice ? MOBILE_MODE : REGULAR_MODE;
+      
+      // Extract font size based on the appropriate mode config
       const fontSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, 24));
       
       // Create a temporary container to attach to the DOM
@@ -182,6 +186,9 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
             continue;
           }
           
+          // Adjust font size for mobile if needed
+          const textFontSize = isMobileDevice ? 20 : 24; // Slightly smaller font for mobile
+          
           // Create the export HTML with maximized text width
           exportContainer.innerHTML = `
             <div class="book-export" style="
@@ -203,7 +210,7 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
               ">
                 <div style="
                   font-family: monospace;
-                  font-size: 24px;
+                  font-size: ${textFontSize}px;
                   white-space: pre-wrap;
                   line-height: 1.2;
                   color: #3F3F3F;
@@ -225,7 +232,7 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
               ">
                 <div style="
                   font-family: monospace;
-                  font-size: 24px;
+                  font-size: ${textFontSize}px;
                   white-space: pre-wrap;
                   line-height: 1.2;
                   color: #3F3F3F;

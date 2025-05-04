@@ -23,12 +23,20 @@ export const REGULAR_MODE = {
   bookScale: 1,         // Book container scale
 }
 
-// Editor mode - Smaller book when editor is enabled
+// Editor mode - Smaller book when editor is enabled 
 export const EDITOR_MODE = {
   charsPerLine: CONSISTENT_CHARS_PER_LINE,  // Same as regular mode
   linesPerPage: CONSISTENT_LINES_PER_PAGE,  // Same as regular mode
   fillFactor: 0.85,     // Same fill factor to maintain consistent font sizing algorithm
-  bookScale: 0.8,       // Scale of book container only (80% of regular size)
+  bookScale: 1,       // Scale of book container only (80% of regular size)
+}
+
+// Mobile mode - Optimized for small screens
+export const MOBILE_MODE = {
+  charsPerLine: 16,        // Fewer characters per line for mobile
+  linesPerPage: 14,        // Slightly more lines to compensate
+  fillFactor: 0.95,        // Higher fill factor for better text fitting
+  bookScale: 1,            // Full scale for mobile
 }
 
 // Consistent text styling
