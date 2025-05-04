@@ -370,19 +370,62 @@ textarea::placeholder {
 }
 
 /* Special styles for exporting book */
-.exporting-book textarea {
+.exporting-book textarea,
+.exporting-book .minecraft-text-export {
   opacity: 1 !important;
   visibility: visible !important;
   display: block !important;
   transform: none !important;
   transition: none !important;
-  -webkit-font-smoothing: subpixel-antialiased !important;
+  -webkit-font-smoothing: antialiased !important;
   -moz-osx-font-smoothing: grayscale !important;
   text-rendering: geometricPrecision !important;
+  font-family: var(--font-minecraft), 'Minecraft', monospace !important;
+  pointer-events: none !important;
 }
 
+/* Ensure exported text is properly rendered */
+.minecraft-text-export {
+  font-family: var(--font-minecraft), 'Minecraft', monospace !important;
+  white-space: pre-wrap !important;
+  line-height: 1.6 !important;
+  transform: translateZ(0) !important;
+  backface-visibility: hidden !important;
+  -webkit-backface-visibility: hidden !important;
+}
+
+.minecraft-text-export p {
+  margin: 0 !important;
+  padding: 0 !important;
+  min-height: 1.6em !important;
+  display: block !important;
+  width: 100% !important;
+}
+
+/* Specific styles for handling the book export */
 .exporting-book .book-container {
   pointer-events: none !important;
+  transform: translateZ(0) !important;
+}
+
+/* When in editor mode, force normal sizing for exports */
+.exporting-regular-mode .editor-mode {
+  transform: scale(1) !important;
+}
+
+/* Ensure consistent sizing during export */
+.regular-export-mode {
+  transform: scale(1) !important;
+}
+
+/* Ensure consistent text layout between modes */
+.editor-mode textarea, 
+.regular-mode textarea {
+  /* Common layout properties to maintain consistent layout when toggling */
+  word-break: break-word !important;
+  word-wrap: break-word !important;
+  box-sizing: border-box !important;
+  transition: font-size 0.2s ease-in-out !important;
 }
 
 .export-clone textarea {

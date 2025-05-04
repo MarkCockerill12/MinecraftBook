@@ -2,6 +2,15 @@
 
 import { useRef, useEffect, useState } from "react"
 import { debounce } from "lodash"
+import { 
+  CHARS_PER_PAGE, 
+  MIN_FONT_SIZE, 
+  MAX_FONT_SIZE, 
+  PADDING_VERTICAL, 
+  REGULAR_MODE, 
+  EDITOR_MODE, 
+  TEXT_STYLE 
+} from "@/lib/book-config"
 
 interface BookPageProps {
   readonly content: string
@@ -9,41 +18,25 @@ interface BookPageProps {
   readonly pageNumber: number
 }
 
-export default function BookPage({ content, onChange, pageNumber }: Readonly<BookPageProps>) {
+export default function BookPage({ content, onChange, pageNumber, scale = 1 }: Readonly<BookPageProps & { scale?: number }>) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const [fontSize, setFontSize] = useState(14) // Default font size in px
+  const [fontSize, setFontSize] = useState(MIN_FONT_SIZE * scale)
   const fontSizeRef = useRef(fontSize)
   const contentRef = useRef(content)
-  const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const resizeObserverRef = useRef<ResizeObserver | null>(null)
+  
+  // Track text dimensions to enforce hard limits
+  const [maxLines, setMaxLines] = useState(EDITOR_MODE.linesPerPage)
+  const [maxCharsPerLine, setMaxCharsPerLine] = useState(EDITOR_MODE.charsPerLine)
+  const [textAreaHeight, setTextAreaHeight] = useState<number | null>(null)
 
-  // Constants for Minecraft font
-  const MAX_CHARS = 256
-  const PADDING_VERTICAL = 0 // No padding to maximize text space
-  const MIN_FONT_SIZE = 10
-  const MAX_FONT_SIZE = 48 // Increased to allow larger text
-
-  // Special constants for different layout modes
+  // Get layout-specific sizing constants based on editor mode
   const getOptimalSizingConstantsForLayout = () => {
-    // Check if we're in editor mode (smaller book)
     const isEditorMode = containerRef.current?.closest('.editor-mode') !== null;
     
-    if (isEditorMode) {
-      // Sizing for editor mode
-      return {
-        charsPerLine: 18, // Target characters per line
-        linesPerPage: 14, // Target lines per page
-        fillFactor: 0.9,  // 90% fill factor for editor mode
-      };
-    } else {
-      // Full-sized book
-      return {
-        charsPerLine: 14,  // Target characters per line - matches Minecraft
-        linesPerPage: 12,  // Target lines per page
-        fillFactor: 0.95,  // 95% fill factor for full size
-      };
-    }
+    // Return the appropriate configuration based on mode
+    return isEditorMode ? EDITOR_MODE : REGULAR_MODE;
   };
 
   // Auto-focus on the first page
@@ -65,19 +58,22 @@ export default function BookPage({ content, onChange, pageNumber }: Readonly<Boo
     // Get layout-specific sizing constants
     const { charsPerLine, linesPerPage, fillFactor } = getOptimalSizingConstantsForLayout();
     
-    // Calculate horizontal and vertical space constraints
-    // Width calculation - how big can each character be?
-    const widthPerChar = containerWidth / charsPerLine;
+    // Save these values for the hard limits
+    setMaxLines(linesPerPage);
+    setMaxCharsPerLine(charsPerLine);
     
-    // Height calculation - how tall can each line be?
+    // Calculate horizontal and vertical space constraints
+    const widthPerChar = containerWidth / charsPerLine;
     const heightPerLine = containerHeight / linesPerPage;
     
-    // Minecraft font is roughly square, so we can use the minimum dimension
-    // to ensure characters fit both horizontally and vertically
+    // Minecraft font is roughly square, so we use the minimum dimension
     let calculatedFontSize = Math.min(widthPerChar * 2.5, heightPerLine);
     
     // Apply the fill factor to ensure text fits properly
     calculatedFontSize *= fillFactor;
+    
+    // Calculate the exact height for the text area based on these dimensions
+    setTextAreaHeight(linesPerPage * calculatedFontSize * TEXT_STYLE.lineHeightFactor);
     
     // Enforce min/max constraints
     return Math.max(MIN_FONT_SIZE, Math.min(MAX_FONT_SIZE, calculatedFontSize));
@@ -91,7 +87,7 @@ export default function BookPage({ content, onChange, pageNumber }: Readonly<Boo
         setFontSize(newSize)
         fontSizeRef.current = newSize
       }
-    }, 10) // Reduced from 100ms to 10ms for faster response
+    }, 10)
   ).current
 
   // Set up resize listener, ResizeObserver, and initial calculation
@@ -126,7 +122,7 @@ export default function BookPage({ content, onChange, pageNumber }: Readonly<Boo
     }
   }, [])
 
-  // Use an observer to detect layout changes from parent containers
+  // Force recalculation when editor mode changes
   useEffect(() => {
     // Force immediate recalculation when editor is toggled or other layout changes occur
     const recalculateSize = () => {
@@ -143,7 +139,7 @@ export default function BookPage({ content, onChange, pageNumber }: Readonly<Boo
       setTimeout(recalculateSize, 50);
     });
 
-    // Observe all parent elements for attribute changes (specifically class changes)
+    // Observe all parent elements for attribute changes that might affect layout
     let element: HTMLElement | null = containerRef.current;
     while (element && element !== document.body) {
       mutationObserver.observe(element, { 
@@ -153,13 +149,13 @@ export default function BookPage({ content, onChange, pageNumber }: Readonly<Boo
       element = element.parentElement;
     }
 
-    // Observe the document body for class changes (in case of global layout shifts)
+    // Observe the document body for global class changes
     mutationObserver.observe(document.body, { 
       attributes: true,
       attributeFilter: ['class']
     });
 
-    // Also force a recalculation on initial render
+    // Force a recalculation on initial render and mode change
     recalculateSize();
 
     return () => {
@@ -167,87 +163,285 @@ export default function BookPage({ content, onChange, pageNumber }: Readonly<Boo
     };
   }, []);
 
-  // Add a resize handler specifically for editor toggle changes
-  useEffect(() => {
-    const handleResize = () => {
-      const newSize = calculateOptimalFontSize();
-      if (Math.abs(newSize - fontSizeRef.current) > 0.5) {
-        setFontSize(newSize);
-        fontSizeRef.current = newSize;
-      }
-    };
-
-    // Force a recalculation on every render with a slight delay
-    const timeoutId = setTimeout(handleResize, 50);
-    
-    return () => {
-      clearTimeout(timeoutId);
-    };
-  });
-
   // Recalculate when content changes significantly
   useEffect(() => {
-    // Clear previous timeout
-    if (resizeTimeoutRef.current) {
-      clearTimeout(resizeTimeoutRef.current)
-    }
-    
-    // Check if content length has changed significantly
+    // Check if content length has changed enough to warrant recalculation
     const contentLengthChanged = Math.abs((content?.length || 0) - (contentRef.current?.length || 0)) > 5
     
     if (contentLengthChanged) {
       contentRef.current = content
       
-      // Delayed recalculation to allow content to render
-      resizeTimeoutRef.current = setTimeout(() => {
-        const newSize = calculateOptimalFontSize()
-        if (Math.abs(newSize - fontSizeRef.current) > 0.5) {
-          setFontSize(newSize)
-          fontSizeRef.current = newSize
-        }
-      }, 200)
+      // Recalculate font size since content changed substantially
+      const newSize = calculateOptimalFontSize()
+      if (Math.abs(newSize - fontSizeRef.current) > 0.5) {
+        setFontSize(newSize)
+        fontSizeRef.current = newSize
+      }
     }
-  }, [content])
+  }, [content]);
+
+  // Add effect to stabilize maxCharsPerLine and prevent random changes
+  useEffect(() => {
+    // Cache the initial values once they're calculated
+    const stableCharsPerLine = maxCharsPerLine;
+    const stableMaxLines = maxLines;
+    
+    // Add a stability mechanism to prevent random changes in dimensions
+    let timeoutId: NodeJS.Timeout;
+    
+    const checkForUnintendedChanges = () => {
+      // If values changed for no good reason, reset them
+      if (maxCharsPerLine !== stableCharsPerLine || maxLines !== stableMaxLines) {
+        // Force recalculation with latest measurements
+        const newSize = calculateOptimalFontSize();
+        setFontSize(newSize);
+        fontSizeRef.current = newSize;
+      }
+      
+      // Continue checking periodically
+      timeoutId = setTimeout(checkForUnintendedChanges, 2000);
+    };
+    
+    // Start checking
+    timeoutId = setTimeout(checkForUnintendedChanges, 2000);
+    
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [maxCharsPerLine, maxLines]);
+
+  // Process text to enforce line and character limits
+  const enforceTextConstraints = (text: string): string => {
+    const lines = text.split('\n');
+    
+    // Limit the number of lines
+    if (lines.length > maxLines) {
+      lines.length = maxLines;
+    }
+    
+    // Limit the characters per line
+    const constrainedLines = lines.map(line => 
+      line.length > maxCharsPerLine ? line.substring(0, maxCharsPerLine) : line
+    );
+    
+    // Limit total characters
+    let result = constrainedLines.join('\n');
+    if (result.length > CHARS_PER_PAGE) {
+      result = result.substring(0, CHARS_PER_PAGE);
+    }
+    
+    return result;
+  };
+
+  // Handle text input with hard constraints and smart line wrapping
+  const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    let newValue = e.target.value;
+    const oldValue = content;
+    const cursorPosition = e.target.selectionStart;
+    
+    // For delete operations, just apply normally
+    if (newValue.length < oldValue.length) {
+      onChange(newValue);
+      return;
+    }
+    
+    // Split the text into lines
+    const oldLines = oldValue.split('\n');
+    const newLines = newValue.split('\n');
+    
+    // Create a copy to work with
+    let processedLines = [...newLines];
+    
+    // Find which line was modified (and how)
+    let modifiedLineIndex = -1;
+    for (let i = 0; i < Math.max(oldLines.length, newLines.length); i++) {
+      if (i >= oldLines.length || i >= newLines.length || oldLines[i] !== newLines[i]) {
+        modifiedLineIndex = i;
+        break;
+      }
+    }
+    
+    // If we couldn't identify a modified line, just enforce basic constraints
+    if (modifiedLineIndex === -1) {
+      const constrained = enforceTextConstraints(newValue);
+      onChange(constrained);
+      return;
+    }
+    
+    // Process lines to ensure they don't exceed character limits
+    // and handle overflow properly
+    for (let i = 0; i < processedLines.length; i++) {
+      // If this line is too long, we need to handle the overflow
+      if (processedLines[i].length > maxCharsPerLine) {
+        // Get the content that will remain on this line
+        const keepContent = processedLines[i].substring(0, maxCharsPerLine);
+        // Get the overflow that needs to move to the next line
+        const overflowContent = processedLines[i].substring(maxCharsPerLine);
+        
+        // Update the current line
+        processedLines[i] = keepContent;
+        
+        // Handle the overflow content
+        if (i < processedLines.length - 1) {
+          // If there's a next line, prepend the overflow to it
+          processedLines[i + 1] = overflowContent + processedLines[i + 1];
+        } else if (processedLines.length < maxLines) {
+          // If there's no next line but we have room, create a new line
+          processedLines.push(overflowContent);
+        }
+        // Otherwise, the overflow is lost as we're at max lines
+      }
+    }
+    
+    // Continue checking subsequent lines for cascade overflow effects
+    let checkAgain = true;
+    let iterationLimit = 10; // Prevent infinite loops
+    
+    while (checkAgain && iterationLimit > 0) {
+      checkAgain = false;
+      iterationLimit--;
+      
+      for (let i = 0; i < processedLines.length - 1; i++) {
+        if (processedLines[i].length > maxCharsPerLine) {
+          checkAgain = true;
+          
+          // Handle overflow to next line
+          const keepContent = processedLines[i].substring(0, maxCharsPerLine);
+          const overflowContent = processedLines[i].substring(maxCharsPerLine);
+          
+          processedLines[i] = keepContent;
+          processedLines[i + 1] = overflowContent + processedLines[i + 1];
+        }
+      }
+      
+      // Handle the last line separately
+      const lastIndex = processedLines.length - 1;
+      if (processedLines[lastIndex] && processedLines[lastIndex].length > maxCharsPerLine) {
+        const keepContent = processedLines[lastIndex].substring(0, maxCharsPerLine);
+        const overflowContent = processedLines[lastIndex].substring(maxCharsPerLine);
+        
+        processedLines[lastIndex] = keepContent;
+        
+        if (processedLines.length < maxLines) {
+          processedLines.push(overflowContent);
+          checkAgain = true;
+        }
+      }
+    }
+    
+    // Enforce line limit
+    if (processedLines.length > maxLines) {
+      processedLines.length = maxLines;
+    }
+    
+    // Join lines and enforce total character limit
+    let processedText = processedLines.join('\n');
+    if (processedText.length > CHARS_PER_PAGE) {
+      processedText = processedText.substring(0, CHARS_PER_PAGE);
+    }
+    
+    // Apply changes if the text has changed
+    if (processedText !== oldValue) {
+      onChange(processedText);
+      
+      // Attempt to maintain cursor position
+      if (textareaRef.current) {
+        setTimeout(() => {
+          if (textareaRef.current && document.activeElement === textareaRef.current) {
+            // Calculate a reasonable cursor position 
+            let newCursorPos = cursorPosition;
+            
+            // If cursor was at the end of a line that wrapped, move to the beginning of the next line
+            if (modifiedLineIndex >= 0 && oldLines[modifiedLineIndex] && 
+                cursorPosition >= oldLines.slice(0, modifiedLineIndex).join('\n').length + 
+                (modifiedLineIndex > 0 ? modifiedLineIndex : 0) + oldLines[modifiedLineIndex].length) {
+              // Position at beginning of next line
+              const prevLinesLength = processedLines.slice(0, modifiedLineIndex + 1).join('\n').length;
+              newCursorPos = prevLinesLength + 1; // +1 for the newline character
+            }
+            
+            textareaRef.current.selectionStart = Math.min(newCursorPos, processedText.length);
+            textareaRef.current.selectionEnd = Math.min(newCursorPos, processedText.length);
+          }
+        }, 0);
+      }
+    }
+  };
 
   // Visual feedback for character limit
-  const isNearLimit = content.length > MAX_CHARS * 0.9
-  const isAtLimit = content.length >= MAX_CHARS
+  const isNearLimit = content.length > CHARS_PER_PAGE * 0.9;
+  const isAtLimit = content.length >= CHARS_PER_PAGE;
+
+  // Update font size when scale changes
+  useEffect(() => {
+    // Force recalculation when scale changes
+    const newSize = calculateOptimalFontSize();
+    setFontSize(newSize);
+  }, [scale]);
 
   return (
-    <div ref={containerRef} className="flex-1 flex flex-col h-full overflow-hidden">
+    <div ref={containerRef} className="relative flex-1 flex flex-col h-full overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none border-minecraft-page"></div>
       <textarea
         ref={textareaRef}
         value={content}
-        onChange={(e) => onChange(e.target.value)}
-        className="flex-1 w-full bg-transparent resize-none outline-none font-minecraft overflow-hidden"
+        onChange={handleTextChange}
+        className="flex-1 w-full bg-transparent resize-none outline-none font-minecraft"
         style={{
-          fontFamily: "var(--font-pixel), 'Minecraft', monospace !important",
+          fontFamily: TEXT_STYLE.fontFamily,
           fontSize: `${fontSize}px`,
-          lineHeight: `${fontSize * 1.2}px`, // Consistent line height for better readability
-          color: "#3F3F3F",
+          lineHeight: `${fontSize * TEXT_STYLE.lineHeightFactor}px`,
+          color: TEXT_STYLE.color,
           padding: "2px",
-          letterSpacing: "0.02em", // Reduced from 0.05em for more Minecraft-like spacing
-          fontKerning: "none", // Keep disabled to prevent character pairs from overlapping
-          fontVariantLigatures: "none", // Keep disabled to maintain Minecraft style
+          letterSpacing: TEXT_STYLE.letterSpacing,
+          fontKerning: "none",
+          fontVariantLigatures: "none",
+          overflowY: "hidden",
+          height: textAreaHeight ? `${textAreaHeight}px` : 'auto',
+          maxHeight: "100%",
+          wordWrap: "break-word",
+          whiteSpace: "pre-wrap",
         }}
+        wrap="hard"
         placeholder="Write your text here..."
-        maxLength={MAX_CHARS}
+        maxLength={CHARS_PER_PAGE}
+        onKeyDown={(e) => {
+          // Prevent entering new lines if we're at the maximum
+          if (e.key === 'Enter' && content.split('\n').length >= maxLines) {
+            e.preventDefault();
+          }
+        }}
       />
-      <style jsx global>{`
+      <style>{`
         textarea::placeholder {
-          font-family: var(--font-pixel), 'Minecraft', monospace !important;
+          font-family: ${TEXT_STYLE.fontFamily};
           color: rgba(63, 63, 63, 0.7);
           opacity: 0.7;
         }
+        .border-minecraft-page {
+          box-shadow: inset 0 0 1px rgba(0,0,0,0.1);
+          pointer-events: none;
+        }
       `}</style>
-      <div 
-        className={`text-center text-xs mt-2 font-minecraft transition-colors duration-200 ${isNearLimit ? (isAtLimit ? 'text-red-600' : 'text-amber-600') : 'text-[#5d5033]'}`}
-        style={{ 
-          fontFamily: "var(--font-pixel), 'Minecraft', monospace !important",
-        }}
-      >
-        {content.length} / {MAX_CHARS} characters
-      </div>
+      {/* Character and line counter with visual feedback */}
+      {(() => {
+        let colorClass = 'text-[#5d5033]';
+        if (isAtLimit) {
+          colorClass = 'text-red-600';
+        } else if (isNearLimit) {
+          colorClass = 'text-amber-600';
+        }
+        return (
+          <div 
+            className={`text-center text-xs mt-2 font-minecraft transition-colors duration-200 ${colorClass}`}
+            style={{ 
+              fontFamily: TEXT_STYLE.fontFamily,
+            }}
+          >
+            {content.length} / {CHARS_PER_PAGE} characters | Lines: {content.split('\n').length}/{maxLines}
+          </div>
+        );
+      })()}
     </div>
   )
 }

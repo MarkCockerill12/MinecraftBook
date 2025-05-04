@@ -4,9 +4,16 @@ import { useState, useEffect, useRef } from "react"
 import BookPage from "./book-page"
 import { ChevronLeft, ChevronRight, Download, BookOpen } from "lucide-react"
 import html2canvas from 'html2canvas'
-
-const MAX_PAGES = 50 // 25 spreads (left and right pages)
-const CHARS_PER_PAGE = 256 // Minecraft allows around 256 characters per page
+import { 
+  MAX_PAGES, 
+  CHARS_PER_PAGE, 
+  EDITOR_MODE, 
+  REGULAR_MODE,
+  TEXT_STYLE,
+  EXPORT_SETTINGS,
+  MAX_FONT_SIZE,
+  MIN_FONT_SIZE
+} from "@/lib/book-config"
 
 export interface MinecraftBookProps {
   className?: string;
@@ -27,6 +34,9 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
   const leftPageIndex = currentSpread * 2
   const rightPageIndex = currentSpread * 2 + 1
 
+  // Get the appropriate book scale based on mode
+  const bookScale = editorEnabled ? EDITOR_MODE.bookScale : REGULAR_MODE.bookScale;
+
   // Update total spreads when content changes
   useEffect(() => {
     const nonEmptyPages = bookContent.filter((page) => page.trim() !== "").length
@@ -34,7 +44,7 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
     setTotalSpreads(Math.max(1, calculatedSpreads + (calculatedSpreads < MAX_PAGES / 2 ? 1 : 0)))
   }, [bookContent])
 
-  // Auto-save book content to localStorage
+  // Load book content from localStorage on initial render
   useEffect(() => {
     const savedContent = localStorage.getItem("minecraftBookContent")
     if (savedContent) {
@@ -48,7 +58,6 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
   }, [])
 
   // Save content to localStorage when it changes
-  // Adding a dependency check to avoid infinite updates
   const contentRef = useRef(bookContent);
   useEffect(() => {
     // Only update localStorage if content has actually changed
@@ -108,25 +117,12 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
 
   /* Apply Minecraft font to page numbers */
   const pageNumberStyle = {
-    fontFamily: 'var(--font-minecraft), Minecraft, monospace',
+    fontFamily: TEXT_STYLE.fontFamily,
     fontSize: '12px',
-    color: '#3F3F3F',
+    color: TEXT_STYLE.color,
   };
 
-  // Helper function for export - forces a wait for rendering to complete
-  const forceRenderCycles = async () => {
-    return new Promise<void>(resolve => {
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          requestAnimationFrame(() => {
-            setTimeout(resolve, 50);
-          });
-        }, 50);
-      });
-    });
-  };
-
-  // Completely rewritten export function to fix image capture issues
+  // Simple, robust export function that works reliably in browsers
   const exportBook = async () => {
     if (isExporting) return;
     setIsExporting(true);
@@ -139,8 +135,9 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
         .map(({ index }) => index);
       
       if (nonEmptyPageIndices.length === 0) {
+        alert("No content to export. Please add some text first.");
         setIsExporting(false);
-        return; // No pages to export
+        return;
       }
       
       // Calculate all spreads that need to be exported
@@ -152,111 +149,163 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
       // Convert to array and sort
       const spreadIndices = Array.from(spreadsToExport).sort((a, b) => a - b);
       
+      // Remember original state to restore later
       const originalSpread = currentSpread;
-      const images = [];
       
-      // Temporarily add an export class to improve text rendering during export
-      document.body.classList.add('exporting-book');
+      // Important: Always use regular mode sizing for exports regardless of editor state
+      const regularModeConfig = REGULAR_MODE;
       
+      // Extract font size based on the regular mode config
+      const fontSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, 24));
+      
+      // Create a temporary container to attach to the DOM
+      const exportContainer = document.createElement('div');
+      exportContainer.style.cssText = `
+        position: fixed;
+        top: -9999px;
+        left: -9999px;
+        width: 1000px;
+        height: 600px;
+        overflow: hidden;
+      `;
+      document.body.appendChild(exportContainer);
+      
+      // Process each spread one at a time
       for (const spreadIndex of spreadIndices) {
-        // Change to the spread we want to export
-        setCurrentSpread(spreadIndex);
-        
-        // Wait longer for rendering to complete to ensure text is fully rendered
-        await new Promise(resolve => setTimeout(resolve, 500));
-        
-        // Take a screenshot of the book
-        if (bookRef.current) {
-          // Hide navigation buttons during export
-          const buttonsToHide = bookRef.current.querySelectorAll('.page-turn-button, .export-button');
-          buttonsToHide.forEach(button => {
-            (button as HTMLElement).style.visibility = 'hidden';
+        try {
+          // Get current left and right page indices for this spread
+          const leftIdx = spreadIndex * 2;
+          const rightIdx = spreadIndex * 2 + 1;
+          
+          // Skip if both pages are empty
+          if (!bookContent[leftIdx]?.trim() && !bookContent[rightIdx]?.trim()) {
+            continue;
+          }
+          
+          // Create the export HTML with maximized text width
+          exportContainer.innerHTML = `
+            <div class="book-export" style="
+              position: relative;
+              width: 1000px;
+              height: 600px;
+              background-image: url('/minecraft-book-open.png');
+              background-size: 100% 100%;
+              background-repeat: no-repeat;
+            ">
+              <div class="left-page" style="
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 50%;
+                height: 100%;
+                padding: 60px 4px 80px 40px;
+                box-sizing: border-box;
+              ">
+                <div style="
+                  font-family: monospace;
+                  font-size: 24px;
+                  white-space: pre-wrap;
+                  line-height: 1.2;
+                  color: #3F3F3F;
+                  letter-spacing: ${TEXT_STYLE.letterSpacing};
+                  height: 100%;
+                  width: 98%;
+                  overflow: hidden;
+                  word-break: break-word;
+                ">${bookContent[leftIdx] || ''}</div>
+              </div>
+              <div class="right-page" style="
+                position: absolute;
+                right: 0;
+                top: 0;
+                width: 50%;
+                height: 100%;
+                padding: 60px 40px 80px 4px;
+                box-sizing: border-box;
+              ">
+                <div style="
+                  font-family: monospace;
+                  font-size: 24px;
+                  white-space: pre-wrap;
+                  line-height: 1.2;
+                  color: #3F3F3F;
+                  letter-spacing: ${TEXT_STYLE.letterSpacing};
+                  height: 100%;
+                  width: 98%;
+                  overflow: hidden;
+                  word-break: break-word;
+                  margin-left: auto;
+                ">${bookContent[rightIdx] || ''}</div>
+              </div>
+              <div class="page-numbers" style="
+                position: absolute;
+                bottom: 40px;
+                left: 50%;
+                transform: translateX(-50%);
+                display: flex;
+                gap: 240px;
+                font-family: monospace;
+                font-size: 16px;
+                color: #3F3F3F;
+              ">
+                <span>${leftIdx + 1}</span>
+                <span>${rightIdx + 1}</span>
+              </div>
+            </div>
+          `;
+          
+          // Wait for the DOM to update
+          await new Promise(r => setTimeout(r, 100));
+          
+          // Use html2canvas with minimal options
+          const bookElement = exportContainer.querySelector('.book-export');
+          const canvas = await html2canvas(bookElement as HTMLElement, {
+            scale: 2,
+            backgroundColor: null,
+            logging: false
           });
           
-          // Ensure textareas are rendered correctly for export
-          const textareas = bookRef.current.querySelectorAll('textarea');
-          textareas.forEach(textarea => {
-            // Make text more visible by adding styles directly to the DOM element
-            textarea.style.opacity = '1';
-            textarea.style.color = '#3F3F3F'; // Ensure dark text color
-          });
-          
-          // Prepare for image capture
-          await new Promise(resolve => setTimeout(resolve, 200));
-          
-          // Create a new canvas with html2canvas
-          const canvas = await html2canvas(bookRef.current, {
-            scale: 2, // Higher resolution for better text quality
-            backgroundColor: null, // Transparent background
-            logging: false,
-            useCORS: true,
-            allowTaint: true,
-            onclone: (clonedDoc) => {
-              // Find all textarea elements in the clone
-              const clonedTextareas = clonedDoc.querySelectorAll('textarea');
-              
-              // Replace each textarea with a div containing the same text
-              clonedTextareas.forEach((textarea) => {
-                const text = (textarea as HTMLTextAreaElement).value;
-                
-                // Create a div to replace the textarea
-                const div = clonedDoc.createElement('div');
-                div.style.fontFamily = "var(--font-pixel), 'Minecraft', monospace";
-                div.style.fontSize = textarea.style.fontSize;
-                div.style.lineHeight = textarea.style.lineHeight;
-                div.style.color = '#3F3F3F';
-                div.style.whiteSpace = 'pre-wrap';
-                div.style.padding = textarea.style.padding;
-                div.style.letterSpacing = textarea.style.letterSpacing;
-                div.style.width = '100%';
-                div.style.height = '100%';
-                div.style.overflow = 'hidden';
-                div.textContent = text;
-                
-                // Replace the textarea with our div
-                textarea.parentNode?.replaceChild(div, textarea);
-              });
-              
-              return clonedDoc;
+          // Convert to image and download
+          canvas.toBlob((blob) => {
+            if (!blob) {
+              throw new Error("Failed to create image blob");
             }
-          });
+            
+            // Create object URL for the blob
+            const url = URL.createObjectURL(blob);
+            
+            // Create and trigger download link
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `minecraft-book-pages-${leftIdx + 1}-${rightIdx + 1}.png`;
+            document.body.appendChild(link);
+            link.click();
+            
+            // Clean up
+            document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(url), 100);
+          }, 'image/png');
           
-          // Restore visibility
-          buttonsToHide.forEach(button => {
-            (button as HTMLElement).style.visibility = '';
-          });
-          
-          // Convert to image
-          const image = canvas.toDataURL("image/png");
-          const pageNumbers = `${spreadIndex * 2 + 1}-${spreadIndex * 2 + 2}`;
-          
-          // Create download link
-          const link = document.createElement("a");
-          link.href = image;
-          link.download = `minecraft-book-pages-${pageNumbers}.png`;
-          
-          images.push({ link, index: spreadIndex });
+          // Wait between exports
+          await new Promise(r => setTimeout(r, 300));
+        } catch (error) {
+          console.error(`Error exporting spread ${spreadIndex}:`, error);
         }
       }
       
-      // Download all images
-      for (const { link } of images) {
-        link.click();
-        await new Promise(resolve => setTimeout(resolve, 500)); // Delay between downloads
-      }
-      
-      // Reset to original spread
+      // Restore original state and clean up
       setCurrentSpread(originalSpread);
+      document.body.removeChild(exportContainer);
+      
     } catch (error) {
-      console.error("Error exporting book:", error);
+      console.error("Error during export:", error);
+      alert("There was an error exporting your book. Please try again.");
     } finally {
-      // Always clean up
-      document.body.classList.remove('exporting-book');
       setIsExporting(false);
     }
   };
 
-  // New method to write external text to the book, splitting into pages as needed
+  // Write external text to the book, splitting into pages as needed
   const writeExternalText = (text: string) => {
     if (!text.trim()) return;
     
@@ -300,16 +349,24 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
 
   return (
     <div className={`relative mx-auto ${className}`}>
-      {/* Book container */}
-      <div className={`relative w-full max-w-3xl mx-auto ${editorEnabled ? 'editor-mode' : ''}`}>
+      {/* Book container with dynamic scaling */}
+      <div 
+        className={`relative w-full max-w-3xl mx-auto ${editorEnabled ? 'editor-mode' : ''} transition-transform duration-300`}
+        style={{
+          transform: `scale(${bookScale})`,
+          transformOrigin: 'center top', // Keep the book aligned at the top when scaled
+        }}
+      >
         <div ref={bookRef} className="book-container relative aspect-[2/1.2] w-full" data-export-book="true">
           {/* Book background */}
           <div
-            className="absolute inset-0 shadow-xl"
+            className="absolute inset-0 shadow-2xl"
             style={{
               backgroundImage: "url('/minecraft-book-open.png')",
               backgroundSize: "100% 100%",
               backgroundRepeat: "no-repeat",
+              filter: "drop-shadow(0px 8px 20px rgba(0, 0, 0, 0.6))",
+              transform: "translateZ(0)",
             }}
           >
             {/* Book pages structure */}
@@ -323,6 +380,7 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
                         content={bookContent[leftPageIndex]}
                         onChange={(text) => handleTextChange(text, true)}
                         pageNumber={leftPageIndex + 1}
+                        scale={1} // Always use 1 here since we're scaling the entire container
                       />
                     </div>
                   </div>
@@ -333,6 +391,7 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
                         content={bookContent[rightPageIndex]}
                         onChange={(text) => handleTextChange(text, false)}
                         pageNumber={rightPageIndex + 1}
+                        scale={1} // Always use 1 here since we're scaling the entire container
                       />
                     </div>
                   </div>
@@ -348,6 +407,7 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
                         content={bookContent[(currentSpread + 1) * 2]}
                         onChange={(text) => handleTextChange(text, true)}
                         pageNumber={(currentSpread + 1) * 2 + 1}
+                        scale={1}
                       />
                     </div>
                   </div>
@@ -363,6 +423,7 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
                         content={bookContent[(currentSpread - 1) * 2 + 1]}
                         onChange={(text) => handleTextChange(text, false)}
                         pageNumber={(currentSpread - 1) * 2 + 2}
+                        scale={1}
                       />
                     </div>
                   </div>
@@ -425,6 +486,7 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
                               content={direction === "next" ? bookContent[rightPageIndex] : bookContent[leftPageIndex]}
                               onChange={(text) => {}}
                               pageNumber={direction === "next" ? rightPageIndex + 1 : leftPageIndex + 1}
+                              scale={1}
                             />
                           </div>
                         </div>
@@ -463,6 +525,7 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
                               content={direction === "next" ? bookContent[(currentSpread + 1) * 2] : bookContent[(currentSpread - 1) * 2 + 1]}
                               onChange={(text) => {}}
                               pageNumber={direction === "next" ? (currentSpread + 1) * 2 + 1 : (currentSpread - 1) * 2 + 2}
+                              scale={1}
                             />
                           </div>
                         </div>
