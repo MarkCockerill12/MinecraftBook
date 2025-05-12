@@ -4,14 +4,20 @@ import MinecraftBook from "@/components/minecraft-book"
 import MobileMinecraftBook from "@/components/mobile-minecraft-book";
 import MinecraftTextEditor from "@/components/minecraft-text-editor"
 import { Switch } from "@/components/ui/switch"
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useIsMobile } from "@/hooks/use-mobile";
+import { MAX_PAGES } from "@/lib/book-config";
 
 export default function Home() {
   const [editorEnabled, setEditorEnabled] = useState(false)
   const writeTextRef = useRef<((text: string) => void) | null>(null)
+  const minecraftBookExportRef = useRef<(() => void) | null>(null);
   const isMobile = useIsMobile();
-  
+
+  // --- SHARED BOOK STATE ---
+  const [bookContent, setBookContent] = useState<string[]>(Array(MAX_PAGES).fill(""));
+  const [currentSpread, setCurrentSpread] = useState(0);
+
   // Handle text from editor
   const handleWriteText = (text: string) => {
     if (writeTextRef.current) {
@@ -22,6 +28,7 @@ export default function Home() {
   return (
     <>
       <div
+        className="minecraft-background"
         style={{
           backgroundImage: "url('/minecraft-background.png')",
           backgroundColor: "#5c8b52",
@@ -71,11 +78,23 @@ export default function Home() {
             {/* Book section - with enhanced shadow */}
             <div className={`transition-all duration-500 transform ${editorEnabled ? 'w-full lg:w-1/2 order-2 mx-auto lg:mx-0' : 'w-full mx-auto'} max-w-3xl book-shadow`}>
               {isMobile ? (
-                <MobileMinecraftBook onWriteTextRef={writeTextRef} />
+                <MobileMinecraftBook 
+                  onWriteTextRef={writeTextRef} 
+                  exportRef={minecraftBookExportRef}
+                  bookContent={bookContent}
+                  setBookContent={setBookContent}
+                  currentSpread={currentSpread}
+                  setCurrentSpread={setCurrentSpread}
+                />
               ) : (
                 <MinecraftBook 
                   onWriteTextRef={writeTextRef}
                   editorEnabled={editorEnabled}
+                  exportRef={minecraftBookExportRef}
+                  bookContent={bookContent}
+                  setBookContent={setBookContent}
+                  currentSpread={currentSpread}
+                  setCurrentSpread={setCurrentSpread}
                 />
               )}
             </div>

@@ -1,32 +1,12 @@
-import { useRef, useState, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import BookPage from "./book-page";
 import { MAX_PAGES, MOBILE_MODE, TEXT_STYLE } from "@/lib/book-config";
 
-export default function MobileMinecraftBook({ className, onWriteTextRef }: Readonly<{ className?: string, onWriteTextRef?: React.MutableRefObject<((text: string) => void) | null> }>) {
-  const [currentSpread, setCurrentSpread] = useState(0);
-  const [bookContent, setBookContent] = useState<string[]>(Array(MAX_PAGES).fill(""));
-  const [totalSpreads, setTotalSpreads] = useState(1);
+export default function MobileMinecraftBook({ className, onWriteTextRef, exportRef, bookContent, currentSpread, setBookContent, setCurrentSpread }: Readonly<{ className?: string, onWriteTextRef?: React.MutableRefObject<((text: string) => void) | null>, exportRef?: React.MutableRefObject<(() => void) | null>, bookContent: string[], currentSpread: number, setBookContent: (content: string[]) => void, setCurrentSpread: (spread: number) => void }>) {
   const bookRef = useRef<HTMLDivElement>(null);
 
   const leftPageIndex = currentSpread * 2;
   const rightPageIndex = currentSpread * 2 + 1;
-
-  useEffect(() => {
-    const nonEmptyPages = bookContent.filter((page) => page.trim() !== "").length;
-    const calculatedSpreads = Math.ceil(nonEmptyPages / 2);
-    setTotalSpreads(Math.max(1, calculatedSpreads + (calculatedSpreads < MAX_PAGES / 2 ? 1 : 0)));
-  }, [bookContent]);
-
-  useEffect(() => {
-    const savedContent = localStorage.getItem("minecraftBookContent");
-    if (savedContent) {
-      let parsed = null;
-      try {
-        parsed = JSON.parse(savedContent);
-      } catch {}
-      setBookContent(Array.isArray(parsed) ? parsed : Array(MAX_PAGES).fill(""));
-    }
-  }, []);
 
   // Enforce 206 char limit for mobile
   const handleTextChange = (text: string, isLeftPage: boolean) => {
@@ -38,6 +18,8 @@ export default function MobileMinecraftBook({ className, onWriteTextRef }: Reado
 
   // Navigation handlers for mobile
   const canPrev = currentSpread > 0;
+  // Calculate total spreads based on content
+  const totalSpreads = Math.max(1, Math.ceil(bookContent.filter((page) => page.trim() !== "").length / 2) + 1);
   const canNext = currentSpread < totalSpreads - 1;
   const handlePrev = () => {
     if (canPrev && !isAnimating) {
@@ -46,7 +28,7 @@ export default function MobileMinecraftBook({ className, onWriteTextRef }: Reado
       setTimeout(() => {
         setCurrentSpread(currentSpread - 1);
         setIsAnimating(false);
-      }, 800); // Match CSS animation duration
+      }, 800);
     }
   };
   const handleNext = () => {
@@ -241,7 +223,7 @@ export default function MobileMinecraftBook({ className, onWriteTextRef }: Reado
           <button onClick={handleNext} disabled={!canNext || isAnimating} className="page-turn-button" aria-label="Next page">&#62;</button>
         </div>
         <button
-          onClick={() => window.dispatchEvent(new CustomEvent('export-minecraft-book'))}
+          onClick={() => exportRef?.current?.()}
           className="minecraft-button export-button flex items-center gap-2 w-full max-w-xs mx-auto justify-center"
           aria-label="Export book as images"
           style={{ height: 40 }}

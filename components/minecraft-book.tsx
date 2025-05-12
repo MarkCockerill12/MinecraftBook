@@ -8,23 +8,21 @@ import {
   MAX_PAGES, 
   CHARS_PER_PAGE, 
   EDITOR_MODE, 
-  REGULAR_MODE,
-  MOBILE_MODE,
-  TEXT_STYLE,
-  EXPORT_SETTINGS,
-  MAX_FONT_SIZE,
-  MIN_FONT_SIZE
+  TEXT_STYLE
 } from "@/lib/book-config"
 
 export interface MinecraftBookProps {
   className?: string;
   onWriteTextRef?: React.MutableRefObject<((text: string) => void) | null>;
   editorEnabled?: boolean;
+  exportRef?: React.MutableRefObject<(() => void) | null>;
+  bookContent: string[];
+  setBookContent: React.Dispatch<React.SetStateAction<string[]>>;
+  currentSpread: number;
+  setCurrentSpread: React.Dispatch<React.SetStateAction<number>>;
 }
 
-export default function MinecraftBook({ className, onWriteTextRef, editorEnabled }: Readonly<MinecraftBookProps>) {
-  const [currentSpread, setCurrentSpread] = useState(0)
-  const [bookContent, setBookContent] = useState<string[]>(Array(MAX_PAGES).fill(""))
+export default function MinecraftBook({ className, onWriteTextRef, editorEnabled, exportRef, bookContent, setBookContent, currentSpread, setCurrentSpread }: Readonly<MinecraftBookProps>) {
   const [totalSpreads, setTotalSpreads] = useState(1)
   const [isAnimating, setIsAnimating] = useState(false)
   const [direction, setDirection] = useState<"next" | "prev">("next")
@@ -51,11 +49,14 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
   const minScale = 0.8;
   const minWidth = 700;
   const maxWidth = 1200;
-  const linearBookScale = windowWidth >= maxWidth
-    ? 1
-    : windowWidth <= minWidth
-      ? minScale
-      : minScale + (windowWidth - minWidth) * (1 - minScale) / (maxWidth - minWidth);
+  let linearBookScale: number;
+  if (windowWidth >= maxWidth) {
+    linearBookScale = 1;
+  } else if (windowWidth <= minWidth) {
+    linearBookScale = minScale;
+  } else {
+    linearBookScale = minScale + (windowWidth - minWidth) * (1 - minScale) / (maxWidth - minWidth);
+  }
   const bookScale = editorEnabled ? EDITOR_MODE.bookScale : linearBookScale;
 
   // Update total spreads when content changes
@@ -143,45 +144,54 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
     color: TEXT_STYLE.color,
   };
 
+  // Ref to always have latest bookContent for exportBook
+  const bookContentRef = useRef<string[]>(bookContent);
+  useEffect(() => {
+    bookContentRef.current = bookContent;
+  }, [bookContent]);
+
   // Simple, robust export function that works reliably in browsers
   const exportBook = async () => {
     if (isExporting) return;
     setIsExporting(true);
-    
     try {
-      // Get all pages that have content
-      const nonEmptyPageIndices = bookContent
-        .map((content, index) => ({ content, index }))
-        .filter(({ content }) => content.trim() !== "")
-        .map(({ index }) => index);
-      
+      // Get all pages that have content (use ref to ensure latest)
+      const nonEmptyPageIndices = bookContentRef.current
+        .map((content: string, index: number) => ({ content, index }))
+        .filter(({ content }: { content: string }) => content.trim() !== "")
+        .map(({ index }: { index: number }) => index);
       if (nonEmptyPageIndices.length === 0) {
         alert("No content to export. Please add some text first.");
         setIsExporting(false);
         return;
       }
-      
       // Calculate all spreads that need to be exported
       const spreadsToExport = new Set<number>();
-      nonEmptyPageIndices.forEach(pageIndex => {
+      nonEmptyPageIndices.forEach((pageIndex: number) => {
         spreadsToExport.add(Math.floor(pageIndex / 2));
       });
-      
       // Convert to array and sort
       const spreadIndices = Array.from(spreadsToExport).sort((a, b) => a - b);
-      
       // Remember original state to restore later
       const originalSpread = currentSpread;
-      
-      // Check if we're on a mobile device
-      const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 640;
-      
-      // Choose the appropriate mode configuration for export
-      const modeConfig = isMobileDevice ? MOBILE_MODE : REGULAR_MODE;
-      
-      // Extract font size based on the appropriate mode config
-      const fontSize = Math.min(MAX_FONT_SIZE, Math.max(MIN_FONT_SIZE, 24));
-      
+      // Extract paddings and font size based on the device type
+      let leftPadding = '4em';
+      let rightPadding = '4em';
+      let topPadding = '60px';
+      let bottomPadding = '80px';
+      let textFontSize = 24;
+      if (typeof window !== 'undefined' && window.innerWidth < 640) {
+        leftPadding = rightPadding = '1.2em';
+        topPadding = '1em';
+        bottomPadding = '1.2em';
+        textFontSize = 18;
+      } else if (editorEnabled) {
+        leftPadding = '3em';
+        rightPadding = '1.5em';
+        topPadding = '2em';
+        bottomPadding = '2.5em';
+        textFontSize = 22;
+      }
       // Create a temporary container to attach to the DOM
       const exportContainer = document.createElement('div');
       exportContainer.style.cssText = `
@@ -193,26 +203,17 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
         overflow: hidden;
       `;
       document.body.appendChild(exportContainer);
-      
       // Process each spread one at a time
       for (const spreadIndex of spreadIndices) {
         try {
           // Get current left and right page indices for this spread
           const leftIdx = spreadIndex * 2;
           const rightIdx = spreadIndex * 2 + 1;
-          
           // Skip if both pages are empty
-          if (!bookContent[leftIdx]?.trim() && !bookContent[rightIdx]?.trim()) {
+          if (!bookContentRef.current[leftIdx]?.trim() && !bookContentRef.current[rightIdx]?.trim()) {
             continue;
           }
-          
           // Create the export HTML with paddings and layout matching the live book
-          const isEditor = editorEnabled;
-          const leftPadding = isMobileDevice ? '1.2em' : (isEditor ? '3em' : '4em');
-          const rightPadding = isMobileDevice ? '1.2em' : (isEditor ? '1.5em' : '4em');
-          const topPadding = isMobileDevice ? '1em' : (isEditor ? '2em' : '60px');
-          const bottomPadding = isMobileDevice ? '1.2em' : (isEditor ? '2.5em' : '80px');
-          const textFontSize = isMobileDevice ? 18 : (isEditor ? 22 : 24);
           exportContainer.innerHTML = `
             <div class="book-export" style="
               position: relative;
@@ -242,7 +243,8 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
                   width: 98%;
                   overflow: hidden;
                   word-break: break-word;
-                ">${bookContent[leftIdx] || ''}</div>
+                  margin-left: auto;
+                ">${bookContentRef.current[leftIdx] ?? ''}</div>
               </div>
               <div class="right-page" style="
                 position: absolute;
@@ -264,8 +266,7 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
                   width: 98%;
                   overflow: hidden;
                   word-break: break-word;
-                  margin-left: auto;
-                ">${bookContent[rightIdx] || ''}</div>
+              ">${bookContentRef.current[rightIdx] ?? ''}</div>
               </div>
               <div class="page-numbers" style="
                 position: absolute;
@@ -377,9 +378,10 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
     }
   }, [onWriteTextRef]);
 
-  // --- MOBILE BACKGROUND FIX ---
-  // If on mobile, apply a full-viewport background behind the book
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+  // Expose exportBook function via exportRef (assign directly in render for latest closure)
+  if (exportRef) {
+    exportRef.current = exportBook;
+  }
 
   // Use mounted to gate all client-only checks (like isMobile)
   if (!mounted) return null;
