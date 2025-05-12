@@ -31,12 +31,32 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
   const [isExporting, setIsExporting] = useState(false)
   const bookRef = useRef<HTMLDivElement>(null)
   
+  // --- HYDRATION ERROR FIX ---
+  // Use a state to track client-side mount for mode-dependent rendering
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
+
   // Calculate the current left and right page numbers
   const leftPageIndex = currentSpread * 2
   const rightPageIndex = currentSpread * 2 + 1
 
-  // Get the appropriate book scale based on mode
-  const bookScale = editorEnabled ? EDITOR_MODE.bookScale : REGULAR_MODE.bookScale;
+  // Responsive book scale for desktop: scale linearly with window width
+  const [windowWidth, setWindowWidth] = useState(typeof window !== 'undefined' ? window.innerWidth : 1200);
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  // Linear scale: 1 at 1200px and above, 0.7 at 700px and below
+  const minScale = 0.8;
+  const minWidth = 700;
+  const maxWidth = 1200;
+  const linearBookScale = windowWidth >= maxWidth
+    ? 1
+    : windowWidth <= minWidth
+      ? minScale
+      : minScale + (windowWidth - minWidth) * (1 - minScale) / (maxWidth - minWidth);
+  const bookScale = editorEnabled ? EDITOR_MODE.bookScale : linearBookScale;
 
   // Update total spreads when content changes
   useEffect(() => {
@@ -186,10 +206,13 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
             continue;
           }
           
-          // Adjust font size for mobile if needed
-          const textFontSize = isMobileDevice ? 20 : 24; // Slightly smaller font for mobile
-          
-          // Create the export HTML with maximized text width
+          // Create the export HTML with paddings and layout matching the live book
+          const isEditor = editorEnabled;
+          const leftPadding = isMobileDevice ? '1.2em' : (isEditor ? '3em' : '4em');
+          const rightPadding = isMobileDevice ? '1.2em' : (isEditor ? '1.5em' : '4em');
+          const topPadding = isMobileDevice ? '1em' : (isEditor ? '2em' : '60px');
+          const bottomPadding = isMobileDevice ? '1.2em' : (isEditor ? '2.5em' : '80px');
+          const textFontSize = isMobileDevice ? 18 : (isEditor ? 22 : 24);
           exportContainer.innerHTML = `
             <div class="book-export" style="
               position: relative;
@@ -205,7 +228,7 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
                 top: 0;
                 width: 50%;
                 height: 100%;
-                padding: 60px 4px 80px 40px;
+                padding: ${topPadding} ${rightPadding} ${bottomPadding} ${leftPadding};
                 box-sizing: border-box;
               ">
                 <div style="
@@ -227,7 +250,7 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
                 top: 0;
                 width: 50%;
                 height: 100%;
-                padding: 60px 40px 80px 4px;
+                padding: ${topPadding} ${leftPadding} ${bottomPadding} ${rightPadding};
                 box-sizing: border-box;
               ">
                 <div style="
@@ -354,14 +377,21 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
     }
   }, [onWriteTextRef]);
 
+  // --- MOBILE BACKGROUND FIX ---
+  // If on mobile, apply a full-viewport background behind the book
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
+
+  // Use mounted to gate all client-only checks (like isMobile)
+  if (!mounted) return null;
+
   return (
-    <div className={`relative mx-auto ${className}`}>
+    <div className={`relative mx-auto ${className}`} style={{ paddingTop: 86 }}>
       {/* Book container with dynamic scaling */}
       <div 
         className={`relative w-full max-w-3xl mx-auto ${editorEnabled ? 'editor-mode' : ''} transition-transform duration-300`}
         style={{
           transform: `scale(${bookScale})`,
-          transformOrigin: 'center top', // Keep the book aligned at the top when scaled
+          transformOrigin: 'center top',
         }}
       >
         <div ref={bookRef} className="book-container relative aspect-[2/1.2] w-full" data-export-book="true">
@@ -372,185 +402,186 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
               backgroundImage: "url('/minecraft-book-open.png')",
               backgroundSize: "100% 100%",
               backgroundRepeat: "no-repeat",
-              filter: "drop-shadow(0px 8px 20px rgba(0, 0, 0, 0.6))",
-              transform: "translateZ(0)",
+              zIndex: 1,
             }}
-          >
-            {/* Book pages structure */}
-            <div className="relative w-full h-full">
-              {/* Current visible pages (when not animating) */}
-              {!isAnimating && (
-                <>
-                  <div className="book-page book-page-left" style={{ zIndex: 10 }}>
-                    <div className="flex flex-col pt-10 pl-16 pr-8 pb-14 h-full">
-                      <BookPage
-                        content={bookContent[leftPageIndex]}
-                        onChange={(text) => handleTextChange(text, true)}
-                        pageNumber={leftPageIndex + 1}
-                        scale={1} // Always use 1 here since we're scaling the entire container
-                      />
-                    </div>
+          />
+          {/* Book pages structure */}
+          <div className="relative w-full h-full">
+            {/* Current visible pages (when not animating) */}
+            {!isAnimating && (
+              <>
+                <div className="book-page book-page-left" style={{ zIndex: 10 }}>
+                  <div className={`flex flex-col h-full ${editorEnabled ? '' : 'pt-10 pl-16 pr-8 pb-14'}`} style={editorEnabled ? { padding: '2em 1.5em 2.5em 3em' } : {}}>
+                    <BookPage
+                      content={bookContent[leftPageIndex]}
+                      onChange={(text) => handleTextChange(text, true)}
+                      pageNumber={leftPageIndex + 1}
+                      scale={1}
+                      mode={editorEnabled ? 'editor' : 'desktop'}
+                    />
                   </div>
+                </div>
 
-                  <div className="book-page book-page-right" style={{ zIndex: 10 }}>
-                    <div className="flex flex-col pt-10 pl-8 pr-16 pb-14 h-full">
-                      <BookPage
-                        content={bookContent[rightPageIndex]}
-                        onChange={(text) => handleTextChange(text, false)}
-                        pageNumber={rightPageIndex + 1}
-                        scale={1} // Always use 1 here since we're scaling the entire container
-                      />
-                    </div>
+                <div className="book-page book-page-right" style={{ zIndex: 10 }}>
+                  <div className={`flex flex-col h-full ${editorEnabled ? '' : 'pt-10 pl-8 pr-16 pb-14'}`} style={editorEnabled ? { padding: '2em 3em 2.5em 1.5em' } : {}}>
+                    <BookPage
+                      content={bookContent[rightPageIndex]}
+                      onChange={(text) => handleTextChange(text, false)}
+                      pageNumber={rightPageIndex + 1}
+                      scale={1}
+                      mode={editorEnabled ? 'editor' : 'desktop'}
+                    />
                   </div>
-                </>
-              )}
-              
-              {/* Next spread pages (visible during forward animation) */}
-              {isAnimating && direction === "next" && (
-                <>
-                  <div className="book-page book-page-left" style={{ zIndex: 5 }}>
-                    <div className="flex flex-col pt-10 pl-16 pr-8 pb-14 h-full">
-                      <BookPage
-                        content={bookContent[(currentSpread + 1) * 2]}
-                        onChange={(text) => handleTextChange(text, true)}
-                        pageNumber={(currentSpread + 1) * 2 + 1}
-                        scale={1}
-                      />
-                    </div>
+                </div>
+              </>
+            )}
+            
+            {/* Next spread pages (visible during forward animation) */}
+            {isAnimating && direction === "next" && (
+              <>
+                <div className="book-page book-page-left" style={{ zIndex: 5 }}>
+                  <div className="flex flex-col pt-10 pl-16 pr-8 pb-14 h-full">
+                    <BookPage
+                      content={bookContent[(currentSpread + 1) * 2]}
+                      onChange={(text) => handleTextChange(text, true)}
+                      pageNumber={(currentSpread + 1) * 2 + 1}
+                      scale={1}
+                    />
                   </div>
-                </>
-              )}
-              
-              {/* Previous spread pages (visible during backward animation) */}
-              {isAnimating && direction === "prev" && (
-                <>
-                  <div className="book-page book-page-right" style={{ zIndex: 5 }}>
-                    <div className="flex flex-col pt-10 pl-8 pr-16 pb-14 h-full">
-                      <BookPage
-                        content={bookContent[(currentSpread - 1) * 2 + 1]}
-                        onChange={(text) => handleTextChange(text, false)}
-                        pageNumber={(currentSpread - 1) * 2 + 2}
-                        scale={1}
-                      />
-                    </div>
+                </div>
+              </>
+            )}
+            
+            {/* Previous spread pages (visible during backward animation) */}
+            {isAnimating && direction === "prev" && (
+              <>
+                <div className="book-page book-page-right" style={{ zIndex: 5 }}>
+                  <div className="flex flex-col pt-10 pl-8 pr-16 pb-14 h-full">
+                    <BookPage
+                      content={bookContent[(currentSpread - 1) * 2 + 1]}
+                      onChange={(text) => handleTextChange(text, false)}
+                      pageNumber={(currentSpread - 1) * 2 + 2}
+                      scale={1}
+                    />
                   </div>
-                </>
-              )}
+                </div>
+              </>
+            )}
 
-              {/* Turning page animation with improved text visibility */}
-              {isAnimating && (
+            {/* Turning page animation with improved text visibility */}
+            {isAnimating && (
+              <div 
+                className={`turning-page ${direction === "next" ? "turning-page-right" : "turning-page-left"}`}
+                style={{ zIndex: 40 }} // Ensure above book
+              >
                 <div 
-                  className={`turning-page ${direction === "next" ? "turning-page-right" : "turning-page-left"}`}
+                  className="turning-page-element"
+                  style={{
+                    transformStyle: "preserve-3d",
+                    width: "100%",
+                    height: "100%",
+                  }}
                 >
                   <div 
-                    className="turning-page-element"
+                    className={`${direction === "next" ? "animate-page-forward" : "animate-page-backward"}`}
                     style={{
-                      transformStyle: "preserve-3d",
+                      position: "absolute",
                       width: "100%",
                       height: "100%",
+                      transformStyle: "preserve-3d",
+                      willChange: "transform",
                     }}
                   >
+                    {/* Front face of turning page */}
                     <div 
-                      className={`${direction === "next" ? "animate-page-forward" : "animate-page-backward"}`}
+                      className="turning-page-content turning-page-front"
                       style={{
-                        position: "absolute",
-                        width: "100%",
-                        height: "100%",
+                        backgroundImage: "url('/minecraft-book-open.png')",
+                        backgroundSize: "200% 100%",
+                        backgroundPosition: direction === "next" ? "right center" : "left center",
                         transformStyle: "preserve-3d",
                         willChange: "transform",
                       }}
                     >
-                      {/* Front face of turning page */}
                       <div 
-                        className="turning-page-content turning-page-front"
+                        className="flex flex-col h-full overflow-hidden"
                         style={{
-                          backgroundImage: "url('/minecraft-book-open.png')",
-                          backgroundSize: "200% 100%",
-                          backgroundPosition: direction === "next" ? "right center" : "left center",
+                          paddingTop: "10px",
+                          paddingBottom: "14px",
+                          paddingLeft: direction === "next" ? "8px" : "16px",
+                          paddingRight: direction === "next" ? "16px" : "8px",
                           transformStyle: "preserve-3d",
-                          willChange: "transform",
                         }}
                       >
+                        {/* BookPage with text that sticks to the page */}
                         <div 
-                          className="flex flex-col h-full overflow-hidden"
-                          style={{
-                            paddingTop: "10px",
-                            paddingBottom: "14px",
-                            paddingLeft: direction === "next" ? "8px" : "16px",
-                            paddingRight: direction === "next" ? "16px" : "8px",
+                          style={{ 
+                            transform: "translateZ(0.1px)", 
                             transformStyle: "preserve-3d",
+                            willChange: "transform", 
                           }}
                         >
-                          {/* BookPage with text that sticks to the page */}
-                          <div 
-                            style={{ 
-                              transform: "translateZ(0.1px)", 
-                              transformStyle: "preserve-3d",
-                              willChange: "transform", 
-                            }}
-                          >
-                            <BookPage
-                              content={direction === "next" ? bookContent[rightPageIndex] : bookContent[leftPageIndex]}
-                              onChange={(text) => {}}
-                              pageNumber={direction === "next" ? rightPageIndex + 1 : leftPageIndex + 1}
-                              scale={1}
-                            />
-                          </div>
+                          <BookPage
+                            content={direction === "next" ? bookContent[rightPageIndex] : bookContent[leftPageIndex]}
+                            onChange={(text) => {}}
+                            pageNumber={direction === "next" ? rightPageIndex + 1 : leftPageIndex + 1}
+                            scale={1}
+                          />
                         </div>
                       </div>
-                      
-                      {/* Back face of turning page */}
+                    </div>
+                    {/* Back face of turning page */}
+                    <div 
+                      className="turning-page-content turning-page-back"
+                      style={{
+                        backgroundImage: "url('/minecraft-book-open.png')",
+                        backgroundSize: "200% 100%",
+                        backgroundPosition: direction === "next" ? "left center" : "right center",
+                        transformStyle: "preserve-3d",
+                        willChange: "transform",
+                      }}
+                    >
                       <div 
-                        className="turning-page-content turning-page-back"
+                        className="flex flex-col h-full overflow-hidden"
                         style={{
-                          backgroundImage: "url('/minecraft-book-open.png')",
-                          backgroundSize: "200% 100%",
-                          backgroundPosition: direction === "next" ? "left center" : "right center",
+                          paddingTop: "10px",
+                          paddingBottom: "14px",
+                          paddingLeft: direction === "next" ? "16px" : "8px",
+                          paddingRight: direction === "next" ? "8px" : "16px",
                           transformStyle: "preserve-3d",
-                          willChange: "transform",
                         }}
                       >
+                        {/* BookPage with text that sticks to the page */}
                         <div 
-                          className="flex flex-col h-full overflow-hidden"
-                          style={{
-                            paddingTop: "10px",
-                            paddingBottom: "14px",
-                            paddingLeft: direction === "next" ? "16px" : "8px",
-                            paddingRight: direction === "next" ? "8px" : "16px",
+                          style={{ 
+                            transform: "translateZ(0.1px)", 
                             transformStyle: "preserve-3d",
+                            willChange: "transform",
                           }}
                         >
-                          {/* BookPage with text that sticks to the page */}
-                          <div 
-                            style={{ 
-                              transform: "translateZ(0.1px)", 
-                              transformStyle: "preserve-3d",
-                              willChange: "transform",
-                            }}
-                          >
-                            <BookPage
-                              content={direction === "next" ? bookContent[(currentSpread + 1) * 2] : bookContent[(currentSpread - 1) * 2 + 1]}
-                              onChange={(text) => {}}
-                              pageNumber={direction === "next" ? (currentSpread + 1) * 2 + 1 : (currentSpread - 1) * 2 + 2}
-                              scale={1}
-                            />
-                          </div>
+                          <BookPage
+                            content={direction === "next" ? bookContent[(currentSpread + 1) * 2] : bookContent[(currentSpread - 1) * 2 + 1]}
+                            onChange={(text) => {}}
+                            pageNumber={direction === "next" ? (currentSpread + 1) * 2 + 1 : (currentSpread - 1) * 2 + 2}
+                            scale={1}
+                          />
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
           </div>
 
-          {/* Navigation buttons */}
+          {/* Navigation buttons - always visible and usable */}
           {currentSpread > 0 && (
             <button
               onClick={prevPage}
               disabled={isAnimating || isExporting}
-              className="page-turn-button absolute left-8 top-1/2 transform -translate-y-1/2 z-30"
+              className="page-turn-button absolute left-2 sm:left-8 top-1/2 transform -translate-y-1/2 z-30"
               aria-label="Previous page"
+              style={{ pointerEvents: isAnimating || isExporting ? 'none' : 'auto' }}
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
@@ -560,8 +591,9 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
             <button
               onClick={nextPage}
               disabled={isAnimating || isExporting}
-              className="page-turn-button absolute right-8 top-1/2 transform -translate-y-1/2 z-30"
+              className="page-turn-button absolute right-2 sm:right-8 top-1/2 transform -translate-y-1/2 z-30"
               aria-label="Next page"
+              style={{ pointerEvents: isAnimating || isExporting ? 'none' : 'auto' }}
             >
               <ChevronRight className="h-5 w-5" />
             </button>
@@ -575,13 +607,27 @@ export default function MinecraftBook({ className, onWriteTextRef, editorEnabled
             <div style={pageNumberStyle}>{rightPageIndex + 1}</div>
           </div>
         </div>
-
-        {/* Export button */}
+      </div>
+      {/* Export button - always under the middle of the book */}
+      <div
+        className="flex justify-center"
+        style={{
+          position: 'absolute',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: '100%',
+          marginTop: 0,
+          marginBottom: 16,
+          zIndex: 50,
+          pointerEvents: 'auto',
+        }}
+      >
         <button
           onClick={exportBook}
           disabled={isExporting}
-          className="minecraft-button export-button flex items-center gap-2 mt-8"
+          className={`minecraft-button export-button flex items-center gap-2 w-full max-w-xs mx-auto justify-center ${isExporting ? 'opacity-60' : ''}`}
           aria-label="Export book as images"
+          style={{ position: 'relative', zIndex: 40, margin: 0 }}
         >
           <BookOpen className="h-4 w-4" />
           <span>{isExporting ? "Exporting..." : "Export Book Pages"}</span>

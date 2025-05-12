@@ -17,9 +17,11 @@ interface BookPageProps {
   readonly content: string
   readonly onChange: (text: string) => void
   readonly pageNumber: number
+  charLimit?: number // Optional override for per-page char limit
+  mode?: 'mobile' | 'desktop' | 'editor' // Explicit mode
 }
 
-export default function BookPage({ content, onChange, pageNumber, scale = 1 }: Readonly<BookPageProps & { scale?: number }>) {
+export default function BookPage({ content, onChange, pageNumber, scale = 1, charLimit, mode }: Readonly<BookPageProps & { scale?: number, charLimit?: number, mode?: 'mobile' | 'desktop' | 'editor' }>) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const [fontSize, setFontSize] = useState(MIN_FONT_SIZE * scale)
@@ -32,20 +34,18 @@ export default function BookPage({ content, onChange, pageNumber, scale = 1 }: R
   const [maxCharsPerLine, setMaxCharsPerLine] = useState(EDITOR_MODE.charsPerLine)
   const [textAreaHeight, setTextAreaHeight] = useState<number | null>(null)
 
-  // Get layout-specific sizing constants based on editor mode and screen size
+  // Get layout-specific sizing constants based on mode
   const getOptimalSizingConstantsForLayout = () => {
-    const isEditorMode = containerRef.current?.closest('.editor-mode') !== null;
-    
-    // Check if we're on a mobile device (screen width < 640px)
-    const isMobileDevice = typeof window !== 'undefined' && window.innerWidth < 640;
-    
-    // First priority: use mobile settings if on a small screen
-    if (isMobileDevice) {
-      return MOBILE_MODE;
-    }
-    
-    // Otherwise use regular editor/desktop modes
-    return isEditorMode ? EDITOR_MODE : REGULAR_MODE;
+    if (mode === 'mobile') return MOBILE_MODE;
+    if (mode === 'editor') return EDITOR_MODE;
+    return REGULAR_MODE;
+  };
+
+  // Utility to get the correct char limit for the current mode
+  const getCharLimit = () => {
+    if (typeof charLimit === 'number') return charLimit;
+    // Desktop always uses CHARS_PER_PAGE
+    return CHARS_PER_PAGE;
   };
 
   // Auto-focus on the first page
@@ -130,6 +130,13 @@ export default function BookPage({ content, onChange, pageNumber, scale = 1 }: R
       debouncedResize.cancel()
     }
   }, [])
+
+  // Always update maxLines and maxCharsPerLine when mode changes
+  useEffect(() => {
+    const { linesPerPage, charsPerLine } = getOptimalSizingConstantsForLayout();
+    setMaxLines(linesPerPage);
+    setMaxCharsPerLine(charsPerLine);
+  }, [mode]);
 
   // Force recalculation when editor mode changes
   useEffect(() => {
@@ -235,8 +242,9 @@ export default function BookPage({ content, onChange, pageNumber, scale = 1 }: R
     
     // Limit total characters
     let result = constrainedLines.join('\n');
-    if (result.length > CHARS_PER_PAGE) {
-      result = result.substring(0, CHARS_PER_PAGE);
+    const charLimit = getCharLimit();
+    if (result.length > charLimit) {
+      result = result.substring(0, charLimit);
     }
     
     return result;
@@ -345,8 +353,9 @@ export default function BookPage({ content, onChange, pageNumber, scale = 1 }: R
     
     // Join lines and enforce total character limit
     let processedText = processedLines.join('\n');
-    if (processedText.length > CHARS_PER_PAGE) {
-      processedText = processedText.substring(0, CHARS_PER_PAGE);
+    const charLimit = getCharLimit();
+    if (processedText.length > charLimit) {
+      processedText = processedText.substring(0, charLimit);
     }
     
     // Apply changes if the text has changed
@@ -378,8 +387,8 @@ export default function BookPage({ content, onChange, pageNumber, scale = 1 }: R
   };
 
   // Visual feedback for character limit
-  const isNearLimit = content.length > CHARS_PER_PAGE * 0.9;
-  const isAtLimit = content.length >= CHARS_PER_PAGE;
+  const isNearLimit = content.length > getCharLimit() * 0.9;
+  const isAtLimit = content.length >= getCharLimit();
 
   // Update font size when scale changes
   useEffect(() => {
@@ -394,7 +403,22 @@ export default function BookPage({ content, onChange, pageNumber, scale = 1 }: R
       <textarea
         ref={textareaRef}
         value={content}
-        onChange={handleTextChange}
+        onChange={e => {
+          // Prevent input that would exceed line or char limits
+          let value = e.target.value;
+          let charLimit = getCharLimit();
+          // Remove extra lines
+          let lines = value.split('\n').slice(0, maxLines);
+          // Remove extra chars per line
+          lines = lines.map(line => line.slice(0, maxCharsPerLine));
+          // Join and trim to char limit
+          let processed = lines.join('\n').slice(0, charLimit);
+          if (processed !== value) {
+            // If user pasted or typed too much, forcibly trim
+            e.target.value = processed;
+          }
+          onChange(processed);
+        }}
         className="flex-1 w-full bg-transparent resize-none outline-none font-minecraft"
         style={{
           fontFamily: TEXT_STYLE.fontFamily,
@@ -413,10 +437,14 @@ export default function BookPage({ content, onChange, pageNumber, scale = 1 }: R
         }}
         wrap="hard"
         placeholder="Write your text here..."
-        maxLength={CHARS_PER_PAGE}
-        onKeyDown={(e) => {
+        maxLength={getCharLimit()}
+        onKeyDown={e => {
           // Prevent entering new lines if we're at the maximum
           if (e.key === 'Enter' && content.split('\n').length >= maxLines) {
+            e.preventDefault();
+          }
+          // Prevent typing if at char limit
+          if (content.length >= getCharLimit() && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
             e.preventDefault();
           }
         }}
@@ -447,7 +475,7 @@ export default function BookPage({ content, onChange, pageNumber, scale = 1 }: R
               fontFamily: TEXT_STYLE.fontFamily,
             }}
           >
-            {content.length} / {CHARS_PER_PAGE} characters | Lines: {content.split('\n').length}/{maxLines}
+            {content.length} / {getCharLimit()} characters | Lines: {content.split('\n').length}/{maxLines}
           </div>
         );
       })()}

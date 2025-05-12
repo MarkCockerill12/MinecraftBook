@@ -51,11 +51,6 @@ body {
   font-family: var(--font-pixel), monospace !important;
   display: flex;
   flex-direction: column;
-  background-image: url('/minecraft-background.png');
-  background-size: cover;
-  background-attachment: fixed;
-  background-position: center;
-  background-repeat: no-repeat;
 }
 
 #__next, main {
@@ -434,4 +429,27 @@ textarea::placeholder {
   display: block !important;
   text-rendering: geometricPrecision !important;
   transform: translateZ(0) !important;
+}
+
+@media (max-width: 500px) {
+  /* Mobile book page padding for all common phones */
+  .book-page > div,
+  .book-page .flex.flex-col {
+    padding: 4px !important;
+    padding-top: 4px !important;
+    padding-bottom: 8px !important;
+    padding-left: 11px !important;
+    padding-right: 11px !important;
+  }
+  .book-container {
+    max-width: 100vw !important;
+    min-width: 0 !important;
+  }
+  textarea {
+    font-size: 1rem !important;
+    min-height: 0 !important;
+    padding: 4px !important;
+
+    line-height: 1.05 !important;
+  }
 }

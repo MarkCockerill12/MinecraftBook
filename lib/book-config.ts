@@ -3,7 +3,7 @@
 
 // Overall book settings
 export const MAX_PAGES = 50 // 25 spreads (left and right pages)
-export const CHARS_PER_PAGE = 256 // Minecraft allows around 256 characters per page
+export const CHARS_PER_PAGE = 335 // Minecraft allows around 256 characters per page
 
 // Text layout configuration - Common between modes
 export const MIN_FONT_SIZE = 14
@@ -33,15 +33,16 @@ export const EDITOR_MODE = {
 
 // Mobile mode - Optimized for small screens
 export const MOBILE_MODE = {
-  charsPerLine: 16,        // Fewer characters per line for mobile
-  linesPerPage: 14,        // Slightly more lines to compensate
-  fillFactor: 0.95,        // Higher fill factor for better text fitting
+  charsPerLine: 22, 
+  linesPerPage: 11,       // Allow lines on mobile
+  fillFactor: 0.85,        // Use all available space for text
   bookScale: 1,            // Full scale for mobile
+  chars_per_page: 252      // the mobile has a limit of 252
 }
 
 // Consistent text styling
 export const TEXT_STYLE = {
-  lineHeightFactor: 1.2,  // Line height = fontSize * this factor
+  lineHeightFactor: 1.05,  // Tighter line height for all modes (was 1.2)
   letterSpacing: "0.02em",
   color: "#3F3F3F",
   fontFamily: "var(--font-pixel), 'Minecraft', monospace !important",
