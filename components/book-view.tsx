@@ -110,19 +110,21 @@ export function BookView({
   const nextRight = isAnimating ? nextSpread * 2 + 1 : rightPageIndex
 
   return (
-    <div className="flex items-center justify-center gap-1 sm:gap-2 md:gap-4 w-full px-1 sm:px-2 overflow-x-hidden">
-      {/* Left arrow */}
-      {!isExporting && (
-        <button
-          onClick={onPrevSpread}
-          disabled={!canGoPrev}
-          className="mc-btn shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
-          style={{ padding: compact ? "4px 6px" : "4px 8px sm:6px 10px" }}
-          aria-label="Previous page spread"
-        >
-          <ChevronLeft className={compact ? "w-3 h-3" : "w-3 h-3 sm:w-4 sm:h-4 md:w-5 md:h-5"} />
-        </button>
-      )}
+    <div className="flex items-center justify-center w-full overflow-x-hidden relative">
+      {/* Book container with buttons positioned inside on mobile */}
+      <div className="relative flex items-center justify-center gap-1 sm:gap-2 md:gap-4 w-full px-1 sm:px-2">
+        {/* Left arrow - positioned absolutely on mobile to overlay book */}
+        {!isExporting && (
+          <button
+            onClick={onPrevSpread}
+            disabled={!canGoPrev}
+            className="mc-btn shrink-0 disabled:opacity-30 disabled:cursor-not-allowed absolute left-0 sm:relative z-40"
+            style={{ padding: compact ? "4px 6px" : "4px 6px sm:6px 10px" }}
+            aria-label="Previous page spread"
+          >
+            <ChevronLeft className={compact ? "w-3 h-3" : "w-3 h-3 sm:w-4 sm:h-4 md:w-5 md:h-5"} />
+          </button>
+        )}
 
       {/* Book */}
       <div
@@ -253,18 +255,19 @@ export function BookView({
         )}
       </div>
 
-      {/* Right arrow */}
+      {/* Right arrow - positioned absolutely on mobile to overlay book */}
       {!isExporting && (
         <button
           onClick={onNextSpread}
           disabled={!canGoNext}
-          className="mc-btn shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
-          style={{ padding: compact ? "4px 6px" : "4px 8px sm:6px 10px" }}
+          className="mc-btn shrink-0 disabled:opacity-30 disabled:cursor-not-allowed absolute right-0 sm:relative z-40"
+          style={{ padding: compact ? "4px 6px" : "4px 6px sm:6px 10px" }}
           aria-label="Next page spread"
         >
           <ChevronRight className={compact ? "w-3 h-3" : "w-3 h-3 sm:w-4 sm:h-4 md:w-5 md:h-5"} />
         </button>
       )}
+      </div>
     </div>
   )
 }
