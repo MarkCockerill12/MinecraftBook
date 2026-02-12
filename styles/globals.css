@@ -3,7 +3,7 @@
 @tailwind utilities;
 
 body {
-  font-family: var(--font-pixel), monospace !important;
+  font-family: Arial, Helvetica, sans-serif;
 }
 
 @layer utilities {
@@ -47,7 +47,6 @@ body {
     --sidebar-accent-foreground: 240 5.9% 10%;
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
-    --font-minecraft: var(--font-pixel), monospace;
   }
   .dark {
     --background: 0 0% 3.9%;
@@ -88,10 +87,8 @@ body {
 @layer base {
   * {
     @apply border-border;
-    font-family: var(--font-pixel), monospace !important;
   }
   body {
     @apply bg-background text-foreground;
-    font-family: var(--font-pixel), monospace !important;
   }
 }
